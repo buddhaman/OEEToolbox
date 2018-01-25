@@ -10,7 +10,7 @@ public class Camera {
 	public float y;
 	public int width;
 	public int height;
-	float scale = 0.1f;
+	public float scale = 0.1f;
 	
 	public Vector2 temp = new Vector2();
 	

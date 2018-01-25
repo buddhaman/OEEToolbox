@@ -1,7 +1,7 @@
 spritesheet.png
 size: 504, 500
 format: RGBA8888
-filter: Linear,Linear
+filter: Nearest,Nearest
 repeat: none
 blank
   rotate: false
