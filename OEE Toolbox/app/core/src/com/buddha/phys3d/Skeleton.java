@@ -21,6 +21,9 @@ public class Skeleton {
 	public Particle3 head;
 	float unit = 1f;
 	float feetLerp = 1f;
+	float friction = 0.9f;
+	private Vector3 fixedAt = new Vector3();
+	private Vector3 fixed;
 	
 	public Skeleton(float x, float y) {
 		
@@ -59,6 +62,7 @@ public class Skeleton {
 		head = particles.get(0);
 		lfoot = particles.get(9);
 		rfoot = particles.get(11);
+		setFriction(friction);
 	}
 	
 	public void update() {
@@ -68,8 +72,6 @@ public class Skeleton {
 			if(p.pos.z < 0)
 				p.pos.z = 0;
 		}
-		moveFoot(lfoot.pos, lfootPos);
-		moveFoot(rfoot.pos, rfootPos);
 		//selfCollision();
 		for(Constraint3 c : constraints) {
 			c.solve();
@@ -77,6 +79,14 @@ public class Skeleton {
 		for(Constraint3 c : constraints) {
 			c.solve();
 		}
+		if(fixed!=null) {
+			fixed.set(fixedAt);
+		}
+	}
+	
+	public void moveFeet() {
+		moveFoot(lfoot.pos, lfootPos);
+		moveFoot(rfoot.pos, rfootPos);
 	}
 	
 	public void move() {
@@ -157,5 +167,39 @@ public class Skeleton {
 	public void hitBall(Ball ball) {
 		Vector3 foot = MathUtils.randomBoolean() ? lfootPos : rfootPos;
 		foot.set(ball.circle.getX(), ball.circle.getY(), 0);
+	}
+
+	public void seizure() {
+		float strength = 0.1f;
+		for(Particle3 p : particles) {
+			p.addImpulse(MathUtils.random(-1, 1)*strength, MathUtils.random(-1, 1)*strength, MathUtils.random(-1,1)*strength);
+		}
+	}
+	
+	public void setFriction(float friction) {
+		for(Particle3 p : particles) {
+			p.friction = friction;
+		}
+	}
+	
+	public void stopKicking() {
+		setFriction(friction);
+		fixed=null;
+	}
+
+	public void kick(float kickX, float kickY, float angle, float magn) {
+		setFriction(1f);
+		boolean left = MathUtils.randomBoolean();
+		Particle3 foot = left ? lfoot : rfoot;
+		float ix = MathUtils.cos(angle)*magn;
+		float iy = MathUtils.sin(angle)*magn;
+		foot.addImpulse(ix, iy, 1f);
+		particles.get(1).addImpulse(ix, iy, -1f);
+		fixParticle(left ? rfoot.pos : lfoot.pos);
+	}
+
+	private void fixParticle(Vector3 p) {
+		this.fixedAt.set(p);
+		this.fixed = p;
 	}
 }

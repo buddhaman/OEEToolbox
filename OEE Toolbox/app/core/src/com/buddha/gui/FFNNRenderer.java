@@ -4,6 +4,7 @@ import com.badlogic.gdx.graphics.g2d.Batch;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas.AtlasRegion;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
@@ -120,7 +121,11 @@ public class FFNNRenderer extends Actor {
 		bounds.setWidth(getParent().getWidth());
 		bounds.setHeight(getParent().getHeight()-30);
 		for(Circle c : circles) {
-			bounds.checkCollisions(c);
+			if(bounds.checkCollisions(c)) {
+				if(c.particle.getSpeed() > 20f) {
+					agent.seizure();
+				}
+			}
 			c.update();
 		}
 		for(Syn s : synapses) {
@@ -134,7 +139,7 @@ public class FFNNRenderer extends Actor {
 	@Override
 	public void draw(Batch batch, float parentAlpha) {
 		super.draw(batch, parentAlpha);
-
+		float nr, ng, nb = 0;
 		bounds.x1 = getParent().getX();
 		bounds.y1 = getParent().getY();
 		for(Syn s : synapses) {
@@ -145,12 +150,21 @@ public class FFNNRenderer extends Actor {
 		for(int i = 0; i < circles.size; i++) {
 			Circle c = circles.get(i);
 			float activation = getNeuronActivation(i);
-			batch.setColor(activation, activation, activation, 1);
-
+			activation = MathUtils.clamp(activation, -1, 1);
+			if(activation > 0) {
+				nr=ng=nb=activation;
+			} else {
+				nr = -activation;ng = -0.65f*activation;nb = -.81f*activation;
+			}
+			batch.setColor(nr, ng, nb, 1f);
 			float dst = c.particle.pos.dst(mx, my);
 			float fact = neuronR+2*neuronR-2*neuronR*Math.min(100, dst)/100f;
+			float df = 0.702f;
 			c.radius = fact;
+			batch.setColor(nr*0.8f, ng*0.8f, nb*0.8f, 1f);
 			drawCircle(batch, c.getX(), c.getY(), c.radius);
+			batch.setColor(nr, ng, nb, 1f);
+			drawCircle(batch, c.getX()-0.2f*c.radius*df, c.getY()+0.2f*c.radius*df, c.radius*0.8f);
 		}
 	}
 	

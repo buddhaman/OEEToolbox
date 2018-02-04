@@ -5,7 +5,6 @@ import java.util.Arrays;
 import java.util.List;
 
 import com.badlogic.gdx.math.MathUtils;
-import com.buddha.agent.Agent;
 import com.buddha.agent.InputModel;
 import com.buddha.simulation.Properties;
 
@@ -53,11 +52,10 @@ public class FFNN {
 		return layers.get(layers.size()-1);
 	}
 	
-	public static int calcSize(InputModel model) {
+	public static int calcSize(InputModel model, int outputNum) {
 		int hiddenNum = Properties.current.getIProperty("layer size");
 		int inputNum = model.size;
 		int hiddenLayers = Properties.current.getIProperty("hidden layers");
-		int outputNum = 3;
 		return hiddenNum*(inputNum+1)+(hiddenLayers-1)*hiddenNum*(hiddenNum+1)+outputNum*(hiddenNum+1);
 	}
 	
@@ -71,6 +69,26 @@ public class FFNN {
 	
 	public float squash(float x) {
 		return (float)(1.0/(1+Math.exp(-x)));
+	}
+	
+	public static void scale(float[] x, float scale) {
+		for(int i = 0; i < x.length; i++) {
+			x[i]=x[i]*scale;
+		}
+	}
+	
+	public static void add(float[] x, float[] y) {
+		for(int i = 0; i < x.length; i++) {
+			x[i] = x[i]+y[i];
+		}
+	}
+	
+	public static float getMagnitude(float[] x) {
+		double square = 0;
+		for(int i = 0; i < x.length; i++) {
+			square+=x[i]*x[i];
+		}
+		return (float)Math.sqrt(square);
 	}
 	
 	@Override

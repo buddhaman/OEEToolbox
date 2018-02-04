@@ -7,6 +7,8 @@ import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter;
 import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.Button;
 import com.badlogic.gdx.scenes.scene2d.ui.ButtonGroup;
@@ -20,8 +22,12 @@ import com.badlogic.gdx.scenes.scene2d.ui.Slider;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton.TextButtonStyle;
+import com.badlogic.gdx.scenes.scene2d.ui.TextField;
+import com.badlogic.gdx.scenes.scene2d.ui.TextField.TextFieldFilter.DigitsOnlyFilter;
+import com.badlogic.gdx.scenes.scene2d.ui.TextField.TextFieldListener;
 import com.badlogic.gdx.scenes.scene2d.ui.Window;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
+import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.buddha.agent.Agent;
 import com.buddha.simulation.Properties;
@@ -48,6 +54,9 @@ public class GUI {
 	
 	//options tabel
 	ButtonGroup<Button> optionsGroup;
+	public Array<TextFieldUpdater> textFieldUpdaters = new Array<TextFieldUpdater>();
+	
+	int numBrainWindows = 0;
 	
 	public GUI(SimulationScreen screen) {
 		this.screen = screen;
@@ -83,6 +92,8 @@ public class GUI {
 		float bwWidth = 400;
 		float bwHeight = 400;
 		final Window brainWindow = new Window("brain", skin, "resizable");
+		brainWindow.setPosition(numBrainWindows*5, numBrainWindows*5);
+		numBrainWindows++;
 		brainWindow.setResizable(true);
 		brainWindow.getTitleTable().add();
 		FFNNRenderer renderer = new FFNNRenderer(agent, screen.atlas, bwWidth, bwHeight);
@@ -90,6 +101,7 @@ public class GUI {
 		closeButton.addListener(new ChangeListener(){
 			public void changed(ChangeEvent event, Actor actor) {
 				brainWindow.remove();
+				numBrainWindows--;
 			}
 		});
 		closeButton.add(new Image(skin.getDrawable("icon-close")));
@@ -115,18 +127,19 @@ public class GUI {
 		mainTable.add(showSettings).left().row();
 		HorizontalGroup group = new HorizontalGroup();
 		final Button rulesButton = new TextButton("rules", skin.get("toggle", TextButtonStyle.class)); 
-		final Button inputsButton = new TextButton("input", skin.get("toggle", TextButtonStyle.class)); 
+		final Button inputsButton = new TextButton("simulation", skin.get("toggle", TextButtonStyle.class)); 
 		rulesButton.setChecked(true);
 		optionsGroup = new ButtonGroup<Button>(rulesButton, inputsButton);
 		group.addActor(rulesButton);
 		group.addActor(inputsButton);
-		table.add(group).width(260);
+		table.add(group).width(280);
 		
 		//rule table
 		final Table rules = new Table();
 		rules.add(new Label("rules are updated per generation", skin)).row();
 		rules.add(getCheckBox("hardcore")).row();
 		rules.add(getSlider("knockout")).row();
+		rules.add(getNumberField("game duration")).row();
 		
 		//inputs table
 		final Table inputs = new Table();
@@ -134,11 +147,18 @@ public class GUI {
 		
 		//options scrollpane
 		final Table optionsTable = new Table();
-		final ScrollPane scrollPane = new ScrollPane(optionsTable);
+		final ScrollPane scrollPane = new ScrollPane(optionsTable, skin, "list");
 		optionsTable.add(rules);
 		
 		table.row();
-		table.add(scrollPane);
+		table.add(scrollPane).row();
+		final TextButton apply = new TextButton("apply", skin);
+		apply.addListener(new ChangeListener(){
+			public void changed(ChangeEvent event, Actor actor) {
+				applyChanges();
+			}
+		});
+		table.add(apply).pad(5).row();
 		
 		//set button input listener for switching tabs
 		ChangeListener tabListener = new ChangeListener() {
@@ -156,14 +176,39 @@ public class GUI {
 	
 	public Table inputTable() {
 		Table table = new Table();
-		String[] inputOptions = new String[]{"player angle", "player distance","ball angle",
-				"ball distance", "own goal angle", "own goal distance", "opp goal angle", "opp goal distance",
-				"field edge angle", "field edge distance"};
+		table.left();
+		String[] inputOptions = new String[]{"team angle", "team distance", "team direction", 
+				"opp angle", "opp distance", "opp direction"};
 		for(String s : inputOptions) {
 			table.add(getCheckBox(s)).pad(5).left().row();
 		}
+		table.add(getNumberField("nearest team inputs")).pad(5).row();
+		table.add(getNumberField("nearest opp inputs")).pad(5).row();
+		table.add(getNumberField("fixed team inputs")).pad(5).row();
+		table.add(getNumberField("fixed opp inputs")).pad(5).row();
+		inputOptions = new String[]{"ball angle",
+				"ball distance", "ball direction", "own goal angle", "own goal distance", "opp goal angle", "opp goal distance",
+				"field edge angle", "field edge distance", "handle ball"};
+		for(String s : inputOptions) {
+			table.add(getCheckBox(s)).pad(5).left().row();
+		}
+			
+		table.add(getSlider("cutoff")).pad(5).row();
+		table.add(getNumberField("hidden layers")).pad(5).row();
+		table.add(getNumberField("layer size")).pad(5).row();
+		table.add(getNumberField("genes per team")).pad(5).row();
+		table.add(getCheckBox("adaptation")).pad(5).left().row();
+		table.add(getSlider("adaptation vector")).pad(5).row();
+		table.add(getNumberField("rounds")).pad(5).row();
+		table.add(getNumberField("tournaments")).pad(5).row();
+		
 		final TextButton startExperiment = new TextButton("start experiment", skin);
-		table.add(startExperiment);
+		startExperiment.addListener(new ChangeListener(){
+			public void changed(ChangeEvent event, Actor actor) {
+				screen.setupExperiment();
+			}
+		});
+		table.add(startExperiment).pad(5).row();
 		return table;
 	}
 	
@@ -212,6 +257,7 @@ public class GUI {
 	
 	public Table getSlider(String name) {
 		final Table table = new Table();
+		
 		float min = Properties.current.getFMin(name);
 		float max = Properties.current.getFMax(name);
 		float val = Properties.current.getFProperty(name);
@@ -222,8 +268,56 @@ public class GUI {
 				Properties.current.setFProperty(name, slider.getValue());
 			}
 		});
+		InputListener stopTouchDown = new InputListener() {
+			   public boolean touchDown (InputEvent event, float x, float y, int pointer, int button) {
+			      event.stop();
+			      return false;
+			   }
+			};
+		slider.addListener(stopTouchDown);
 		table.add(new Label(name+" ", skin));
 		table.add(slider);
+		return table;
+	}
+	
+	public Table getNumberField(String name) {
+		Table table = new Table();
+		table.add(new Label(name, skin)).space(5);
+		int value = Properties.current.getIProperty(name);
+		final TextField field = new TextField(Integer.toString(value), skin);
+		field.setTextFieldFilter(new DigitsOnlyFilter());
+		this.addTextFieldUpdater(field, name);
+		field.setTextFieldListener(new TextFieldListener(){
+			public void keyTyped(TextField textField, char c) {
+				String text = textField.getText();
+				if(text.length() > 3) {
+					textField.setText(text.substring(0, text.length()-1));
+				}
+			}
+		});
+		TextButton plus = new TextButton("+", skin, "blue");
+		TextButton minus = new TextButton("-", skin, "blue");
+		plus.addListener(new ChangeListener() {
+			public void changed(ChangeEvent event, Actor actor) {
+				String text = field.getText();
+				if(text.length()==0) {
+					text = "0";
+				}
+				field.setText(Integer.toString(Integer.parseInt(text)+1));
+			}
+		});
+		minus.addListener(new ChangeListener() {
+			public void changed(ChangeEvent event, Actor actor) {
+				String text = field.getText();
+				if(text.length()==0) {
+					text = "0";
+				}
+				field.setText(Integer.toString(Integer.parseInt(text)-1));
+			}
+		});
+		table.add(minus).width(16);
+		table.add(field).width(40);
+		table.add(plus).width(16);
 		return table;
 	}
 	
@@ -259,5 +353,37 @@ public class GUI {
 	public void dispose() {
 		stage.dispose();
 		skin.dispose();
+	}
+	
+	public void addTextFieldUpdater(TextField textField, String name) {
+		textFieldUpdaters.add(new TextFieldUpdater(textField, name));
+	}
+	
+	public void applyChanges() {
+		for(TextFieldUpdater updater : textFieldUpdaters) {
+			updater.update();
+		}
+	}
+	
+	public class TextFieldUpdater {
+		public TextField textField;
+		public String name;
+		public TextFieldUpdater(TextField textField, String name) {
+			this.textField = textField;
+			this.name = name;
+		}
+		
+		public void update() {
+			String text = textField.getText();
+			if(text.length()==0) {
+				text = "0";
+			}
+			int value = Integer.parseInt(text);
+			int max = Properties.current.getIMax(name);
+			int min = Properties.current.getIMin(name);
+			value = MathUtils.clamp(value, min, max);
+			textField.setText(Integer.toString(value));
+			Properties.current.setIProperty(name, value);
+		}
 	}
 }

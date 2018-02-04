@@ -1,13 +1,12 @@
 package com.buddha.phys3d;
 
 import com.badlogic.gdx.math.Vector3;
-import com.buddha.world.Particle;
 
 public class Particle3 {
 	public Vector3 pos;
 	public Vector3 oldPos;
 	public float mass;
-	public float friction = 0.9f;
+	public float friction = 1f;
 	
 	public Particle3(float x, float y, float z, float mass) {
 		pos = new Vector3(x, y, z);

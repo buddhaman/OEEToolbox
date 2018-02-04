@@ -15,6 +15,7 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.buddha.agent.Agent;
 import com.buddha.agent.Ball;
+import com.buddha.agent.BallCollisionHandler;
 import com.buddha.agent.BallPositionInput;
 import com.buddha.agent.FieldEdgeInput;
 import com.buddha.agent.GoalPositionInput;
@@ -47,8 +48,8 @@ public class SimulationRenderer {
 	//colors
 	public static Color shoeColor = Color.DARK_GRAY;
 	public static Color skinColor = new Color(234f/255f,192f/255f,134f/255f, 1);
-	public static Color ballColor = new Color(0.3f, 0.3f, 0.3f, 1);
-	public static Color ballColorShade = new Color(0.25f, 0.25f, 0.25f, 1);
+	public static Color ballColor = new Color(0.4f, 0.4f, 0.4f, 1);
+	public static Color ballColorShade = new Color(0.35f, 0.35f, 0.35f, 1);
 	public static Color leftScoreColor = new Color(1f, 0.41f, 0.38f, 1);
 	public static Color rightScoreColor = new Color(0.68f, 0.78f, 1, 1);
 	public static Color grassColor1 = new Color(119f/255f*0.7f, 221f/255f*0.7f, 119f/255f*0.7f,1f);
@@ -86,7 +87,7 @@ public class SimulationRenderer {
 			drawField(bounds);
 		}
 		if(selected!=null)
-			drawInfo(selected, screen.inputModel);
+			drawInfo(selected, screen.gui.font);
 		renderText(screen.gui.font);
 		if(fancy) {
 			drawShadows();
@@ -213,22 +214,19 @@ public class SimulationRenderer {
 		if(fancy) {
 			drawSkeleton(agent);
 		} else {
-			batch.setColor(agent.color);
+			batch.setColor(agent.team.color);
 			utils.drawCircle(circle, agent.circle.getX(), agent.circle.getY(), agent.circle.radius);
 			batch.setColor(Color.BLACK);
 			float x2 = agent.circle.getX()+MathUtils.cos(agent.direction);
 			float y2 = agent.circle.getY()+MathUtils.sin(agent.direction);
 			utils.drawLine(agent.circle.getX(), agent.circle.getY(), x2, y2, 0.3f);
-			if(agent.geneIdx==1) {
-				batch.setColor(Color.RED);
-				utils.drawCircle(circle, agent.circle.getX(), agent.circle.getY(), agent.circle.radius*0.3f);
-			}
 		}
 	}
 	
 	public void drawSkeleton(Agent agent) {
 		Skeleton skeleton = agent.getSkeleton();
 		float width = skeletonWidth;
+		Color teamColor = agent.team.color;
 		//lower legs
 		batch.setColor(skinColor);
 		drawLimb(skeleton.getC(10), width);
@@ -241,7 +239,7 @@ public class SimulationRenderer {
 		drawParticle(skeleton.get(10), width);
 		
 		//pants
-		batch.setColor(agent.color);
+		batch.setColor(teamColor);
 		drawShirt(skeleton.getC(7), width*2f, width);
 		drawShirt(skeleton.getC(9), width*2f, width);
 		drawParticle(skeleton.get(7), width*2f);
@@ -254,7 +252,7 @@ public class SimulationRenderer {
 		batch.setColor(skinColor);
 		drawParticle(skeleton.get(2), width);
 		drawParticle(skeleton.get(4), width);
-		batch.setColor(agent.color);
+		batch.setColor(teamColor);
 		drawShirt(skeleton.getC(1), width, width*1.5f);
 		drawShirt(skeleton.getC(3), width, width*1.5f);
 		batch.setColor(skinColor);
@@ -315,9 +313,10 @@ public class SimulationRenderer {
 		utils.drawCircle(circle, p.pos.x, p.pos.y+p.pos.z*depth, r);
 	}
 	
-	public void drawInfo(Agent agent, InputModel inputModel) {
+	public void drawInfo(Agent agent, BitmapFont font) {
 		//TODO: make
 		Vector2 pos = agent.circle.particle.pos;
+		InputModel inputModel = agent.team.inputModel;
 		batch.setColor(1,1,1,0.3f);
 		float cutoff = 0;
 		for(PlayerPositionInput ppi : inputModel.getElementsOf(PlayerPositionInput.class)) {
@@ -334,9 +333,25 @@ public class SimulationRenderer {
 			drawInfo(agent, fei.startIdx, fei.distance, fei.angle, fei.cutoff);
 		}
 		drawCone(pos.x, pos.y, cutoff, agent.direction-agent.fov/2f, agent.fov);
+		BallCollisionHandler bh = agent.team.ballHandler;
+		if(agent.team.ballHandler!=null) {
+			float angle = bh.getAngle(agent);
+			float magnitude = bh.getMagnitude(agent)*5f;
+			batch.setColor(1f,.41f,.38f, 1f);
+			drawArrow(pos.x, pos.y, magnitude, angle);
+		}
+		if(agent.team.numGenes!=1) {
+			font.getData().setScale(0.4f);
+			String text = "gene "+agent.geneIdx;
+			GUI.fontLayout.setText(font, text);
+			this.drawShadedText(font, text, agent.team.color,
+					0.8f, agent.circle.getX()-GUI.fontLayout.width/2, agent.circle.getY()-3);
+		}
 	}
 	
 	public void drawInfo(Agent a, int idx, boolean distance, boolean angle, float cutoff) {
+		if(!distance && !angle)
+			return;
 		float r = distance ? (1-a.input[idx])*cutoff : 5;
 		float theta = angle ? (distance ? a.input[idx+1] : a.input[idx]) : 0;
 		drawRadialLine(a.circle.getX(), a.circle.getY(), r, theta+a.direction);
@@ -347,6 +362,24 @@ public class SimulationRenderer {
 		utils.drawLine(x0, y0, x0+MathUtils.cos(theta)*r, y0+MathUtils.sin(theta)*r, lw);
 		utils.drawCircle(circle, x0+MathUtils.cos(theta)*r,  y0+MathUtils.sin(theta)*r, lw*4);
 		utils.drawCircle(circle, x0,  y0, lw*4);
+	}
+	
+	public void drawArrow(float x0, float y0, float r, float theta) {
+		float x1 = x0+MathUtils.cos(theta)*r;
+		float y1 = y0+MathUtils.sin(theta)*r;
+		float arrowRad = MathUtils.PI/4f;
+		float al = 1f;
+		float p1x = x1+MathUtils.cos(theta+MathUtils.PI-arrowRad)*al;
+		float p1y = y1+MathUtils.sin(theta+MathUtils.PI-arrowRad)*al;
+		float p2x = x1+MathUtils.cos(theta+MathUtils.PI+arrowRad)*al;
+		float p2y = y1+MathUtils.sin(theta+MathUtils.PI+arrowRad)*al;
+		float aw = 0.2f;
+		utils.drawLine(x0, y0, x1, y1, aw);
+		utils.drawLine(x1, y1, p1x, p1y, aw);
+		utils.drawLine(x1, y1, p2x, p2y, aw);
+		utils.drawCircle(circle, x1, y1, aw);
+		utils.drawCircle(circle, p1x, p1y, aw);
+		utils.drawCircle(circle, p2x, p2y, aw);
 	}
 	
 	public void drawCone(float x0, float y0, float r, float theta0, float tw) {
@@ -369,6 +402,7 @@ public class SimulationRenderer {
 		Color c0 = sim.teams.get(0).color;
 		Color c1 = sim.teams.get(1).color;
 		float shade = 0.8f;
+		font.getData().setScale(1);
 		drawShadedText(font, Integer.toString(sim.teams.get(0).score), 
 				c0, shade, bounds.x1+0.8f, bounds.y1+layout.height+1);
 		drawShadedText(font, Integer.toString(sim.teams.get(1).score),
@@ -388,7 +422,7 @@ public class SimulationRenderer {
 	
 	public void drawShadedText(BitmapFont font, String text, Color c, float shade, float x, float y) {
 		font.setColor(c.r*shade*shade, c.g*shade*shade, c.b*shade*shade, 1);
-		font.draw(batch, text, x, y-0.7f); //?????? fonts behave fukc
+		font.draw(batch, text, x, y-0.7f*font.getScaleY()); //?????? fonts behave fukc
 		font.setColor(c.r*shade, c.g*shade, c.b*shade, 1);
 		font.draw(batch, text, x, y); 
 	}

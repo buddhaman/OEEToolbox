@@ -60,28 +60,49 @@ public class Properties {
 		return floatMap.get(MAX_STRING+name);
 	}
 	
+	public int getIMin(String name) {
+		return integerMap.get(MIN_STRING+name);
+	}
+	
+	public int getIMax(String name) {
+		return integerMap.get(MAX_STRING+name);
+	}
+	
 	public void initDefault() {
 		setBProperty("hardcore", false);
 		
 		//inputs
-		setBProperty("player angle", true);
-		setBProperty("player distance", true);
+		setBProperty("team angle", true);
+		setBProperty("team distance", true);
+		setBProperty("team direction", false);
+		setBProperty("opp angle", true);
+		setBProperty("opp distance", true);
+		setBProperty("opp direction", false);
+		setIProperty("nearest team inputs", 1, 0, 10);
+		setIProperty("nearest opp inputs", 1, 0, 10);
+		setIProperty("fixed team inputs", 0, 0, 10);
+		setIProperty("fixed opp inputs", 0, 0, 10);
 		setBProperty("ball angle", true);
 		setBProperty("ball distance", true);
-		setBProperty("own goal angle", true);
-		setBProperty("own goal distance", true);
+		setBProperty("ball direction", false);
+		setBProperty("own goal angle", false);
+		setBProperty("own goal distance", false);
 		setBProperty("opp goal angle", true);
-		setBProperty("opp goal distance", true);
-		setBProperty("field edge distance", true);
-		setBProperty("field edge angle", true);
-		setFProperty("cutoff", 50, 10f, 110f);
+		setBProperty("opp goal distance", false);
+		setBProperty("field edge distance", false);
+		setBProperty("field edge angle", false);
+		setFProperty("cutoff", 30, 10f, 110f);
+		setBProperty("handle ball", true);
+		setIProperty("hidden layers", 2, 1, 9);
+		setIProperty("layer size", 15, 1, 40);
+		setIProperty("genes per team", 1, 1, 11);
+		setFProperty("adaptation vector", 30f, 1f, 100f);
+		setBProperty("adaptation", false);
+		setIProperty("tournaments", 4, 1, 12);
+		setIProperty("rounds", 4, 2, 8);
 		
 		setFProperty("knockout", 3f, 1f, 90f);
-
-		setIProperty("game duration", 90);
-		
-		setIProperty("hidden layers", 2);
-		setIProperty("layer size", 23);
+		setIProperty("game duration", 20, 5, 180);
 	}
 
 	

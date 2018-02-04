@@ -47,19 +47,25 @@ public class AABB {
 		return Math.abs(x-getCX())<getWidth()/2f && Math.abs(y-getCY()) < getHeight()/2f;
 	}
 	
-	public void checkCollisions(Circle c) {
+	public boolean checkCollisions(Circle c) {
+		boolean hit = false;
 		if(c.getX() > x2) {
 			c.bounce(1f, 0, x2, c.getY());
+			hit = true;
 		}
 		if(c.getY() > y2) {
-			c.bounce(0, 1f, c.getX(),y2);
+			c.bounce(0, 1f, c.getX(), y2);
+			hit = true;
 		}
 		if(c.getX() < x1) {
 			c.bounce(1f, 0, x1, c.getY());
+			hit = true;
 		}
 		if(c.getY() < y1) {
 			c.bounce(0, 1f, c.getX(), y1);
+			hit = true;
 		}
+		return hit;
 	}
 
 	public Vector2 getClosestEdgePoint(Vector2 pos) {

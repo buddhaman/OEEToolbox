@@ -1,83 +1,74 @@
 package com.buddha.agent;
 
-import java.util.Arrays;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
-import com.buddha.neural.FFNN;
+import com.buddha.simulation.Properties;
 import com.buddha.world.AABB;
 
 public class Team {
 	
+	public static final Color[] colors = new Color[]{new Color(0x55ec5dff), new Color(0xe4ec55ff), 
+			new Color(0xf49aefff), new Color(0x9f9af4ff), Color.BLACK, Color.WHITE, Color.BROWN, Color.ORANGE};
 	private static DstComparer DIST_COMPARER = new DstComparer();
 	private static int id_counter = 0;
 	public int id = id_counter++;
 	
-	private Array<float[]> genes = new Array<float[]>();
-	private Array<float[]> adaptation = new Array<float[]>();
-	public Array<Agent> players = new Array<Agent>();
+	private Array<float[]> genes;
+	public Array<float[]> epsilons;
+	public  Array<Agent> players = new Array<Agent>();
+	private Array<Agent> playersTemp = new Array<Agent>();
 	
 	public int size = 11;
 	public int hasBall;
 	public int score;
 	public Color color;
-	public int numGenes = 1;
+	public int numGenes;
 	public InputModel inputModel;
+	public BallCollisionHandler ballHandler;
+	public int layerSize;
+	public int layerNum;
 	
-	public Team(InputModel model) {
+	public Team(InputModel model, BallCollisionHandler ballHandler, Array<float[]> genes, Array<float[]> epsilons) {
 		this.inputModel = model;
-		int geneSize = FFNN.calcSize(model);
-		for(int i = 0; i < numGenes; i++) {
-			genes.add(FFNN.getRandomGene(geneSize, 1f));
-			adaptation.add(FFNN.getRandomGene(geneSize, 15f/((float)Math.sqrt(geneSize))));
-		}
+		this.ballHandler = ballHandler;
+		this.genes = genes;
+		this.epsilons = epsilons;
+		this.layerSize = Properties.current.getIProperty("layer size");
+		this.layerNum = Properties.current.getIProperty("hidden layers");
+		this.numGenes = Properties.current.getIProperty("genes per team");
 		init();
 	}
 	
-	public Team(Team parent1, Team parent2, boolean mutate) {
-		this.inputModel = parent1.inputModel;
-		for(int i = 0; i < parent1.numGenes; i++) {
-			float[] result = Agent.crossover(parent1.genes.get(i), parent2.genes.get(i));
-			float[] aResult = Agent.crossover(parent1.adaptation.get(i), parent2.adaptation.get(i));
-			genes.add(result);
-			adaptation.add(aResult);
-		}
-		if(mutate) {
-			mutate();
-		}
-		init();
-	}
-	
-	public Team(Team parent, boolean mutate) {
+	public void copyProperties(Team parent) {
 		this.inputModel = parent.inputModel;
-		players.clear();
-		for(int i = 0; i < parent.numGenes; i++) {
-			float[] copyX = Arrays.copyOf(parent.genes.get(i), parent.genes.get(i).length);
-			float[] copyA = Arrays.copyOf(parent.adaptation.get(i), parent.adaptation.get(i).length);
-			genes.add(copyX);
-			adaptation.add(copyA);
-		}
-		if(mutate) {
-			mutate();
-		}
+		this.ballHandler = parent.ballHandler;
+		this.numGenes = parent.numGenes;
+		this.layerSize = parent.layerSize;
+		this.layerNum = parent.layerNum;
+		this.genes = parent.genes;
+		this.epsilons = parent.epsilons;
+	}
+	
+	public Team(Team team) {
+		copyProperties(team);
 		init();
 	}
 	
 	public void init() {
-		color = new Color(MathUtils.random(), MathUtils.random(), MathUtils.random(), 1f);
 		for(int i = 0; i < size; i++) {
-			int geneIdx = MathUtils.random(genes.size-1);
-			Agent agent = new Agent(0,0,genes.get(geneIdx), this);
-			agent.setColor(color);
+			int geneIdx = (int)(((float)(i*numGenes))/size);
+			Agent agent = new Agent(0,0,genes.get(geneIdx), this, layerSize, layerNum);
 			agent.setGeneIdx(geneIdx);
 			players.add(agent);
+			playersTemp.add(agent);
 		}
 	}
 	
 	public Agent getClosest(Vector2 v, boolean excludeV, int idx) {
 		DIST_COMPARER.compareTo = v;
-		Agent closest =  players.selectRanked(DIST_COMPARER, excludeV ? idx+2 : idx+1);
+		Agent closest =  playersTemp.selectRanked(DIST_COMPARER, excludeV ? idx+2 : idx+1);
 		return closest;
 	}
 	
@@ -93,10 +84,12 @@ public class Team {
 		}
 	}
 	
-	public void mutate() {
-		for(int i = 0; i < numGenes; i++) {
-			Agent.mutate(genes.get(i), adaptation.get(i));
+	public int numActivePlayers() {
+		int num = 0;
+		for(Agent a: players) {
+			if(a.hasHitBall) num++;
 		}
+		return num;
 	}
 	
 	public void score() {
@@ -104,12 +97,12 @@ public class Team {
 	}
 	
 	public void printAdaptationLengths() {
-		for(float[] adaptation : this.adaptation) {
-			float length = 0;
-			for(int i = 0; i < adaptation.length; i++) {
-				length+=adaptation[i]*adaptation[i];
-			}
-			System.out.println(Math.sqrt(length));
+		
+	}
+
+	public void knockout() {
+		for(Agent a : players) {
+			a.knockout();
 		}
 	}
 	

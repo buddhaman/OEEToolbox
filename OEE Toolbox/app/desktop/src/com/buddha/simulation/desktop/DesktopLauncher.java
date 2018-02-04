@@ -9,6 +9,7 @@ public class DesktopLauncher {
 		LwjglApplicationConfiguration config = new LwjglApplicationConfiguration();
 		config.width = 1280;
 		config.height = 720;
+		config.title = "football";
 		new LwjglApplication(new OEEToolbox(), config);
 	}
 }

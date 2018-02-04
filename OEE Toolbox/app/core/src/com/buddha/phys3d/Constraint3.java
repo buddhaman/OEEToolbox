@@ -1,7 +1,5 @@
 package com.buddha.phys3d;
 
-import com.buddha.world.Particle;
-
 public class Constraint3 {
 	public Particle3 a, b;
 	public float softness = 1f;

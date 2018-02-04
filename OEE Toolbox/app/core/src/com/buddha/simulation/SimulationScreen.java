@@ -27,7 +27,7 @@ public class SimulationScreen implements Screen {
 	public InputModel inputModel;
 	public GUI gui;
 	
-	public int gameDuration;	//1.5 minutes
+	public int gameDuration;			//1.5 minutes
 	public int ticksPerStep = 1;
 	public boolean clicked = false;
 	
@@ -42,21 +42,58 @@ public class SimulationScreen implements Screen {
 	
 	public void setupExperiment() {
 		buildInputModel();
-		evolution = new FootballEvolution(inputModel, 32, 2);
+		int tournaments = Properties.current.getIProperty("tournaments");
+		int selectionSize = (int)Math.pow(2, Properties.current.getIProperty("rounds"));
+		evolution = new FootballEvolution(inputModel, selectionSize, tournaments);
 		startNewGame();
 	}
 	
 	public void buildInputModel() {
 		inputModel = new InputModel();
 		float cutoff = Properties.current.getFProperty("cutoff");
-		PlayerPositionInput ownTeam = new PlayerPositionInput(0, true, true, true, cutoff);
-		PlayerPositionInput otherTeam = new PlayerPositionInput(0, false, true, true, cutoff);
-		BallPositionInput ballPosition = new BallPositionInput(true, true, cutoff);
-		GoalPositionInput ownGoal = new GoalPositionInput(true, true, true, cutoff);
-		GoalPositionInput oppGoal = new GoalPositionInput(false, true, true, cutoff);
-		FieldEdgeInput edge = new FieldEdgeInput(true, false, cutoff/2f);
-		inputModel.addInputElement(PlayerPositionInput.class, ownTeam);
-		inputModel.addInputElement(PlayerPositionInput.class, otherTeam);
+		boolean ballAngle = Properties.current.getBProperty("ball angle");
+		boolean ballDistance = Properties.current.getBProperty("ball distance");
+		boolean ballDirection = Properties.current.getBProperty("ball direction");
+		boolean ownGoalAngle = Properties.current.getBProperty("own goal angle");
+		boolean ownGoalDistance = Properties.current.getBProperty("own goal distance");
+		boolean oppGoalAngle = Properties.current.getBProperty("opp goal angle");
+		boolean oppGoalDistance = Properties.current.getBProperty("opp goal distance");
+		boolean fieldEdgeAngle = Properties.current.getBProperty("field edge angle");
+		boolean fieldEdgeDistance = Properties.current.getBProperty("field edge distance");
+		
+		//player inputs
+		boolean teamAngle = Properties.current.getBProperty("team angle");
+		boolean teamDistance = Properties.current.getBProperty("team distance");
+		boolean teamDirection = Properties.current.getBProperty("team direction");
+		boolean oppAngle = Properties.current.getBProperty("opp angle");
+		boolean oppDistance = Properties.current.getBProperty("opp distance");
+		boolean oppDirection = Properties.current.getBProperty("opp direction");
+		int nearestTeamInputs = Properties.current.getIProperty("nearest team inputs");
+		int nearestOppInputs = Properties.current.getIProperty("nearest opp inputs");
+		int fixedTeamInputs = Properties.current.getIProperty("fixed team inputs");
+		int fixedOppInputs = Properties.current.getIProperty("fixed opp inputs");
+		
+		for(int i = 0; i < nearestTeamInputs; i++) {
+			PlayerPositionInput ppi = new PlayerPositionInput(i, true, false, teamDistance, teamAngle, teamDirection, cutoff);
+			inputModel.addInputElement(PlayerPositionInput.class, ppi);
+		}
+		for(int i = 0; i < nearestOppInputs; i++) {
+			PlayerPositionInput ppi = new PlayerPositionInput(i, false, false, oppDistance, oppAngle, oppDirection, cutoff);
+			inputModel.addInputElement(PlayerPositionInput.class, ppi);
+		}
+		for(int i = 0; i < fixedTeamInputs; i++) {
+			PlayerPositionInput ppi = new PlayerPositionInput(i, true, true, teamDistance, teamAngle, teamDirection, cutoff);
+			inputModel.addInputElement(PlayerPositionInput.class, ppi);
+		}
+		for(int i = 0; i < fixedOppInputs; i++) {
+			PlayerPositionInput ppi = new PlayerPositionInput(i, false, true, oppDistance, oppAngle, oppDirection, cutoff);
+			inputModel.addInputElement(PlayerPositionInput.class, ppi);
+		}
+		
+		BallPositionInput ballPosition = new BallPositionInput(ballDistance, ballAngle, ballDirection, cutoff);
+		GoalPositionInput ownGoal = new GoalPositionInput(true, ownGoalDistance, ownGoalAngle, cutoff);
+		GoalPositionInput oppGoal = new GoalPositionInput(false, oppGoalDistance, oppGoalAngle, cutoff);
+		FieldEdgeInput edge = new FieldEdgeInput(fieldEdgeDistance, fieldEdgeAngle, cutoff/2f);
 		inputModel.addInputElement(BallPositionInput.class, ballPosition);
 		inputModel.addInputElement(GoalPositionInput.class, ownGoal);
 		inputModel.addInputElement(GoalPositionInput.class, oppGoal);

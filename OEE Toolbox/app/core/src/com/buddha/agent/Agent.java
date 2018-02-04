@@ -1,24 +1,18 @@
 package com.buddha.agent;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-
-import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.buddha.neural.FFNN;
 import com.buddha.phys3d.Particle3;
 import com.buddha.phys3d.Skeleton;
 import com.buddha.simulation.Properties;
-import com.buddha.simulation.Simulation;
 import com.buddha.simulation.Timer;
 import com.buddha.world.Circle;
 
 public class Agent {
 	
-	public static float minWeight = -5f;
-	public static float maxWeight = 5f;
+	private static float minWeight = -5f;
+	private static float maxWeight = 5f;
 	
 	public Circle circle;
 	public float direction;
@@ -27,20 +21,25 @@ public class Agent {
 	public float fov = MathUtils.PI2;
 	public FFNN brain;
 	public float[] input;
-	public Color color;
+	public float[] output;
 	public int geneIdx;
 	public Skeleton skeleton;
 	public Team team;
 	public Timer inactive;	//wheter hit or dead
+	public Timer seizure;
+	public Timer kick;
+	public boolean hasHitBall = false;
 	
-	public Agent(float x, float y, float[] gene, Team team) {
+	public Agent(float x, float y, float[] gene, Team team, int layerSize, int layerNum) {
 		this.team = team;
 		this.circle = new Circle(x, y, 1f, 1f);
 		circle.particle.friction = 0.8f;
 		int inputSize = team.inputModel.size;
-		int layerSize = Properties.current.getIProperty("layer size");
-		int layerNum = Properties.current.getIProperty("hidden layers");
 		int outputSize = 3;
+		if(team.ballHandler!=null) {
+			outputSize+=team.ballHandler.getSize();
+			kick = new Timer(5);
+		}
 		brain = new FFNN(gene, inputSize, layerSize, outputSize, layerNum);
 		this.input = new float[inputSize];
 		float knockout = Properties.current.getFProperty("knockout");
@@ -48,9 +47,19 @@ public class Agent {
 	}
 	
 	public void update() {
-		float[] output = brain.update(input);
+		output = brain.update(input);
+		if(seizure!=null && seizure.update()) {
+			for(int i = 0; i < output.length; i++) {
+				output[i] = MathUtils.random(-1f,1f);
+			}
+		}
 		this.inactive.update();
-		if(!inactive()) {
+		if(kick!=null) {
+			if(kick.enabled && !kick.update()) {
+				if(skeleton!=null) skeleton.stopKicking();
+			}
+		}
+		if(!inactive() && !isKicking()) {
 			move(output[0]);
 			turn(output[1]);
 			turn(-output[2]);
@@ -72,15 +81,17 @@ public class Agent {
 	}
 	
 	public void updateSkeleton() {
-		if(!inactive()) {
+		if(!inactive() && (seizure==null || !seizure.enabled) && !isKicking()) {
 			skeleton.move();
 		}
+		if(seizure!=null && seizure.enabled) {
+			skeleton.seizure();
+		}
 		skeleton.setPosition(this);
+		if(!isKicking()) {
+			skeleton.moveFeet();
+		} 
 		skeleton.update();
-	}
-	
-	public void setColor(Color color) {
-		this.color = color;
 	}
 	
 	public void turn(float alpha) {
@@ -139,6 +150,10 @@ public class Agent {
 	}
 
 	public void hitBall(Ball ball) {
+		hasHitBall = true;
+		if(team.ballHandler!=null) {
+			team.ballHandler.handleCollision(this, ball);
+		}
 		if(skeleton!=null) {
 			skeleton.hitBall(ball);
 		}
@@ -160,13 +175,17 @@ public class Agent {
 		float dx = v.x-a.circle.particle.pos.x;
 		float dy = v.y-a.circle.particle.pos.y;
 		float diff = MathUtils.atan2(dy, dx)-a.direction;
+		return angDiff(diff);
+	}
+	
+	public static float angDiff(float diff) {
 		if(diff > MathUtils.PI) {
 			diff-=MathUtils.PI2;
 		}
 		if(diff < -MathUtils.PI) {
 			diff+=MathUtils.PI2;
 		}
-		return diff;
+		return diff; 
 	}
 	
 	public static float calcDist(Agent a, Vector2 v, float cutoff) {
@@ -201,5 +220,32 @@ public class Agent {
 		}
 	}
 
+	public void seizure() {
+		if(seizure==null) {
+			seizure = new Timer(60);
+		}
+		seizure.reset();
+		seizure.start();
+	}
 	
+	public boolean isKicking() {
+		if(kick==null) {
+			return false;
+		} else {
+			return kick.enabled;
+		}
+	}
+
+	public void kick(float kickX, float kickY, float angle, float magnitude) {
+		if(kick.enabled) return;
+		kick.reset();
+		kick.start();
+		if(skeleton!=null) {
+			skeleton.kick(kickX, kickY, angle, magnitude);
+		}
+	}
+
+	public void knockout() {
+		inactive.start();
+	}
 }

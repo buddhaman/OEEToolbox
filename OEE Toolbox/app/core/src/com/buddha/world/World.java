@@ -18,7 +18,6 @@ public class World {
 			Circle c = circles.get(i);
 			c.update();
 		}
-		checkBounds();
 	}
 	
 	public void addCircle(Circle circle) {
