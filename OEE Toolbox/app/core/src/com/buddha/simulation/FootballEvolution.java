@@ -1,55 +1,34 @@
 package com.buddha.simulation;
 
-import java.util.Arrays;
-
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Array;
-import com.buddha.agent.BallCollisionHandler;
-import com.buddha.agent.InputModel;
+import com.buddha.agent.Genotype;
 import com.buddha.agent.Team;
-import com.buddha.neural.FFNN;
+import com.buddha.train.EvolutionStrategy;
 
 public class FootballEvolution {
 	
 	public int popSize;
+	public EvolutionStrategy strategy;
 	public int selectionSize;
 	public int generation;
 	public Array<Team> population;
 	public Array<Selection> selections = new Array<Selection>();
-	public float crossoverProb = 0.7f;
-	public float mutationProb = 0.5f;
 	public int selectionIdx;
 	public int numTournaments;
-	public Array<float[]> solutions = new Array<float[]>();
-	public Array<float[]> adaptations = new Array<float[]>();
 	public float learningRate;
+	public Team team;
 	
-	public BallCollisionHandler ballCollisionHandler;
-	public InputModel inputModel;
-	public int geneSize;
-	public int numGenes;
-	
-	public FootballEvolution(InputModel inputModel, int selectionSize, int tournaments) {
+	public FootballEvolution(int selectionSize, int tournaments, Team team) {
 		this.numTournaments = tournaments;
 		this.popSize = selectionSize*tournaments;
 		this.selectionSize = selectionSize;
-		ballCollisionHandler = Properties.current.getBProperty("handle ball") ? new BallCollisionHandler(3) : null;
-		this.inputModel = inputModel;
-		numGenes = Properties.current.getIProperty("genes per team");
-		int outputs = ballCollisionHandler==null ? 3 : 3+ballCollisionHandler.getSize();
-		geneSize = FFNN.calcSize(inputModel, outputs);
-		float adaptationScl = Properties.current.getFProperty("adaptation vector")*(1.0f/geneSize);
-		for(int i = 0; i < numGenes; i++) {
-			float[] solution = new float[geneSize];
-			float[] adaptation = new float[geneSize];
-			for(int j = 0; j < geneSize; j++) {
-				solution[j] = MathUtils.random(0, 0);
-				adaptation[j] = adaptationScl;
-			}
-			solutions.add(solution);
-			adaptations.add(adaptation);
-		}
-		learningRate = 0.025f;
+		this.team = team;
+		learningRate = Properties.current.getFProperty("learning rate");
+		float sigma = Properties.current.getFProperty("standard deviation");
+		strategy = new EvolutionStrategy(sigma, learningRate, team.getGene().weights, popSize);
+		strategy.updateEpsilons(MathUtils.random);
+		strategy.updateGenes();
 		nextGeneration();
 	}
 	
@@ -71,66 +50,25 @@ public class FootballEvolution {
 	}
 	
 	public void nextGeneration() {
-		boolean adaptationEnabled = Properties.current.getBProperty("adaptation");
-		float adaptationVec = Properties.current.getFProperty("adaptation vector");
-		if(population!=null) {
-			Array<float[]> epsilonSums = new Array<float[]>();
-			Array<float[]> epsilonSquares = new Array<float[]>();
-			for(int i = 0; i < numGenes; i++) {
-				epsilonSums.add(new float[geneSize]);
-				epsilonSquares.add(new float[geneSize]);
-			}
-			for(Selection sel : selections) {
-				Array<float[]> epsilons = sel.getWinner().epsilons;
-				for(int i = 0; i < numGenes; i++) {
-					float[] eps = epsilons.get(i);
-					FFNN.add(epsilonSums.get(i), eps);
-					float[] eps2sum = epsilonSquares.get(i);
-					
-					for(int j = 0; j < geneSize; j++) {
-						eps2sum[j] = eps2sum[j]+eps[j]*eps[j];
-					}
-				}
-			}
-			for(int i = 0; i < numGenes; i++) {
-				float[] eps = epsilonSums.get(i);
-				float[] eps2 = epsilonSquares.get(i);
-				FFNN.scale(eps, 1f/((float)selections.size));
-				FFNN.scale(eps2, 1f/((float)selections.size));
-			}
-			for(int i = 0; i < numGenes; i++) {
-				FFNN.add(solutions.get(i), epsilonSums.get(i));
-				//update adaptation vector
-				float[] adaptation = adaptations.get(i);
-				float[] epsilons2 = epsilonSquares.get(i);
-				System.out.println("avg squared epsilons : " + FFNN.getMagnitude(epsilons2));
-				FFNN.scale(epsilons2, learningRate);
-				FFNN.scale(adaptation, (1-learningRate));
-				FFNN.add(adaptation, epsilons2);
-				System.out.println("solution vector magnitude : " + FFNN.getMagnitude(solutions.get(i)));
-				System.out.println("adaptation vector magnitude : " + FFNN.getMagnitude(adaptation));
-			}
-		}
+		float learningRate = Properties.current.getFProperty("learning rate");
+		strategy.alpha = learningRate;
+		Array<Integer> winners = new Array<Integer>();
 		Array<Team> nextPop = new Array<Team>();
-		for(int i = 0; i < popSize; i++) {
-			Array<float[]> epsilons = new Array<float[]>();
-			Array<float[]> genes = new Array<float[]>();
-			for(int j = 0; j < numGenes; j++) {
-				float[] solution = solutions.get(j);
-				float[] adaptation = adaptations.get(j);
-				float[] epsilon = new float[geneSize];
-				for(int k = 0; k < geneSize; k++) {
-					epsilon[k] = adaptationEnabled ? (float)(MathUtils.random.nextGaussian()*Math.sqrt(adaptation[k])) :
-						(float)(MathUtils.random.nextGaussian()*Math.sqrt(adaptationVec/geneSize));
-				}
-				float[] gene = Arrays.copyOf(solution, geneSize);
-				FFNN.add(gene, epsilon);
-				epsilons.add(epsilon);
-				genes.add(gene);
+		if(population!=null) {
+			for(Selection sel : selections) {
+				winners.add(sel.getWinner().teamNumber);
 			}
-			Team newTeam = new Team(inputModel, ballCollisionHandler, genes, epsilons);
+			for(int i = 0; i < strategy.populationSize; i++) {
+				strategy.setFitness(i, winners.contains(i, true) ? 100000.0f : 0f);
+			}
+			strategy.generation(MathUtils.random);
+		}
+		for(int i = 0; i < popSize; i++) {
+			Genotype genotype = new Genotype(team.getGene(), strategy.genes[i]);
+			Team newTeam = new Team(team, genotype, i);
 			nextPop.add(newTeam);
 		}
+		team.getGene().weights.set(strategy.solution);
 		this.population = nextPop;
 		makeTournaments();
 		generation++;

@@ -1,62 +1,70 @@
 package com.buddha.neural;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.function.Function;
 
 import com.badlogic.gdx.math.MathUtils;
 import com.buddha.agent.InputModel;
-import com.buddha.simulation.Properties;
+import com.buddha.math.BMatrix;
+import com.buddha.math.BVector;
 
-public class FFNN {
-
-	public List<float[]> layers = new ArrayList<float[]>();
-	public List<float[][]> synapses = new ArrayList<float[][]>();
+public class FFNN extends Brain {
 	
-	public FFNN(float[] genome, int inputNum, int hiddenNum, int outputNum, int hiddenLayers) {
-		int genomeIdx = 0;
-		layers.add(new float[inputNum]);
-		for(int hl = 0; hl < hiddenLayers; hl++) {
-			layers.add(new float[hiddenNum]);
-		}
-		layers.add(new float[outputNum]);
-		
-		for(int layer = 1; layer < layers.size(); layer++) {
-			int num = layers.get(layer).length;
-			int prevNum = layers.get(layer-1).length;
-			float[][] syn = new float[num][prevNum+1];		//+1 for bias
-			for(int i = 0; i < num; i++) {
-				for(int j = 0; j < prevNum+1; j++) {
-					syn[i][j] = genome[genomeIdx++];
-				}
-			}
-			synapses.add(syn);
-		}
+	public static final Function<Float, Float> activation = x -> x > 0 ? x : 0;
+	public static final Function<Float, Float> sigmoid = x -> (float)(1.0/(1+Math.exp(-x)));
+	
+	public BVector h;	//output
+	public BVector[] layers;
+	public BMatrix[] weights;
+	
+	public int inputNum;
+	public int hiddenNum;
+	public int outputNum;
+	public int hiddenLayers;
+	
+	public FFNN(int inputNum, int hiddenNum, int outputNum, int hiddenLayers) {
+		this.inputNum = inputNum;
+		this.hiddenNum = hiddenNum;
+		this.outputNum = outputNum;
+		this.hiddenLayers = hiddenLayers;
 	}
 	
-	public float[] update(float[] input) {
-		layers.set(0, input);
-		for(int atLayer = 1; atLayer < layers.size(); atLayer++) {
-			float[] layer = layers.get(atLayer);
-			float[] prevLayer = layers.get(atLayer-1);
-			float[][] syn = synapses.get(atLayer-1);
-			for(int neur = 0; neur < layer.length; neur++) {
-				//update neuron
-				float sum = syn[neur][0];
-				for(int i = 0; i < prevLayer.length; i++) {
-					sum+=prevLayer[i]*syn[neur][i+1];
-				}
-				layer[neur] = squash(sum); 
-			}
+	@Override
+	public void build(BVector genome) {
+		for(int i = 0; i < genome.size; i++) {
+			if(MathUtils.randomBoolean(0.3f))
+				genome.vec[i] = 0;
 		}
-		return layers.get(layers.size()-1);
+		int index = 0;
+		layers = new BVector[hiddenLayers+2];	//hiddenlayers + input + output
+		weights = new BMatrix[hiddenLayers+1];		//input -> hidden (*1), hidden->hidden (*hiddenLayers-1), hidden-> output (*1)
+		layers[0] = new BVector(inputNum);
+		for(int i = 0; i < hiddenLayers; i++) {
+			weights[i] = new BMatrix(genome.vec, index, hiddenNum, i==0 ? inputNum+1 : hiddenNum+1);
+			index+=weights[i].size();
+			layers[i+1] = new BVector(hiddenNum);
+		}
+		weights[hiddenLayers] = new BMatrix(genome.vec, index, outputNum, hiddenNum+1);
+		index+=weights[hiddenLayers].size();
+		layers[hiddenLayers+1] = new BVector(outputNum);		//outputLayers
 	}
 	
-	public static int calcSize(InputModel model, int outputNum) {
-		int hiddenNum = Properties.current.getIProperty("layer size");
-		int inputNum = model.size;
-		int hiddenLayers = Properties.current.getIProperty("hidden layers");
-		return hiddenNum*(inputNum+1)+(hiddenLayers-1)*hiddenNum*(hiddenNum+1)+outputNum*(hiddenNum+1);
+	@Override
+	public BVector update(BVector input) {
+		layers[0].set(input);
+		for(int i = 1; i < layers.length; i++) {
+			//make vector one element larger and set 0th element to 1 (bias term)
+			BVector layer = new BVector(layers[i-1].size+1);
+			layer.set(layers[i-1].vec, 1, layers[i-1].size);
+			layer.vec[0]=1;
+			BVector.product(weights[i-1], layer, layers[i]);
+			layers[i].apply(i== layers.length-1 ? sigmoid : activation);	
+		}
+		return layers[layers.length-1];
+	}
+	
+	public static int calcSize(InputModel model, int layerSize, int layerNum, int outputNum) {
+		int inputNum = model.getSize();
+		return layerSize*(inputNum+1)+(layerNum-1)*layerSize*(layerSize+1)+outputNum*(layerSize+1);
 	}
 	
 	public static float[] getRandomGene(int length, float range) {
@@ -66,46 +74,4 @@ public class FFNN {
 		}
 		return array;
 	}
-	
-	public float squash(float x) {
-		return (float)(1.0/(1+Math.exp(-x)));
-	}
-	
-	public static void scale(float[] x, float scale) {
-		for(int i = 0; i < x.length; i++) {
-			x[i]=x[i]*scale;
-		}
-	}
-	
-	public static void add(float[] x, float[] y) {
-		for(int i = 0; i < x.length; i++) {
-			x[i] = x[i]+y[i];
-		}
-	}
-	
-	public static float getMagnitude(float[] x) {
-		double square = 0;
-		for(int i = 0; i < x.length; i++) {
-			square+=x[i]*x[i];
-		}
-		return (float)Math.sqrt(square);
-	}
-	
-	@Override
-	public String toString() {
-		String s = "synapses:\n";
-		for(int i = 0; i < synapses.size(); i++) {
-			float[][] syn = synapses.get(i);
-			for(int j = 0; j < syn.length; j++) {
-				s+=Arrays.toString(syn[j])+" ";
-			}
-			s+='\n';
-		}
-		s+="state:\n";
-		for(int i = 0; i < layers.size(); i++) {
-			s+=Arrays.toString(layers.get(i))+"\n";
-		}
-		return s;
-	}
-	
 }

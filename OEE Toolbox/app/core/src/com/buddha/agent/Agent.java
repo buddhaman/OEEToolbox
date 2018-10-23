@@ -1,56 +1,118 @@
 package com.buddha.agent;
 
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
+import com.buddha.math.BVector;
+import com.buddha.neural.Brain;
 import com.buddha.neural.FFNN;
+import com.buddha.neural.GRU;
 import com.buddha.phys3d.Particle3;
 import com.buddha.phys3d.Skeleton;
 import com.buddha.simulation.Properties;
 import com.buddha.simulation.Timer;
 import com.buddha.world.Circle;
 
-public class Agent {
-	
-	private static float minWeight = -5f;
-	private static float maxWeight = 5f;
+public class Agent implements DepthComparable {
 	
 	public Circle circle;
 	public float direction;
 	public float turnSpeed = 0.6f;
 	public float speed = 0.1f;
 	public float fov = MathUtils.PI2;
-	public FFNN brain;
-	public float[] input;
-	public float[] output;
-	public int geneIdx;
+	
+	public Genotype gene;
+	public Brain brain;
+	public BVector input;
+	public BVector output;
 	public Skeleton skeleton;
 	public Team team;
-	public Timer inactive;	//wheter hit or dead
+	public Timer inactive;	//wether hit or dead
 	public Timer seizure;
 	public Timer kick;
 	public boolean hasHitBall = false;
+	public float cutoff;
+	public InputModel inputModel;
+	public BallCollisionHandler ballHandler = new BallCollisionHandler(3);
+	public Color color;
+	public boolean selected;
+	public boolean grabbed;
+	public boolean editable = true;
+	public Vector2 target;
+	public boolean hasGRU;
 	
-	public Agent(float x, float y, float[] gene, Team team, int layerSize, int layerNum) {
+	//gene properties
+	public Color skinColor;
+	public Color shoeColor;
+	public Color hairColor;
+	
+	public Agent(float x, float y, Team team, Genotype gene) {
+		this.gene = gene;
 		this.team = team;
+		this.cutoff = Properties.current.getFProperty("cutoff");
+		this.inputModel = gene.inputModel;
 		this.circle = new Circle(x, y, 1f, 1f);
 		circle.particle.friction = 0.8f;
-		int inputSize = team.inputModel.size;
-		int outputSize = 3;
-		if(team.ballHandler!=null) {
-			outputSize+=team.ballHandler.getSize();
-			kick = new Timer(5);
+		int inputSize = inputModel.getSize();
+		if(gene.properties.getSProperty("brain type") == "FFNN") {
+			brain = new FFNN(inputSize, gene.properties.getIProperty("layer size"), 5, gene.properties.getIProperty("hidden layers"));
+		} else {
+			brain = new GRU(inputSize, 5+gene.properties.getIProperty("layer size"));
+			hasGRU = true;
 		}
-		brain = new FFNN(gene, inputSize, layerSize, outputSize, layerNum);
-		this.input = new float[inputSize];
+		brain.build(gene.weights);
+		this.input = new BVector(inputSize);
 		float knockout = Properties.current.getFProperty("knockout");
 		inactive = new Timer((int)(knockout*60));
+		kick = new Timer(7);
+		updateGenes();
+	}
+	
+	public Agent(float x, float y) {
+		this.circle = new Circle(x, y, 1f, 1f);
+		circle.particle.friction = 0.8f;
+		float knockout = Properties.current.getFProperty("knockout");
+		inactive = new Timer((int)(knockout*60));
+		color = getRandomColor();
+		this.gene = new Genotype(new Properties().defaultPlayer());
+		skeleton = new Skeleton(x, y, gene.properties.getFProperty("length"));
+		updateGenes();
+	}
+	
+	public Agent(float x, float y, Genotype gene, Color color) {
+		this.circle = new Circle(x, y, 1f, 1f);
+		circle.particle.friction = 0.8f;
+		float knockout = Properties.current.getFProperty("knockout");
+		inactive = new Timer((int)(knockout*60));
+		this.color = color;
+		this.gene = gene;
+		skeleton = new Skeleton(x, y, gene.properties.getFProperty("length"));
+		updateGenes();
+	}
+	
+	public void updateGenes() {
+		skinColor = Genotype.skinColors[gene.properties.getIProperty("skin color")];
+		shoeColor = Genotype.shoeColors[gene.properties.getIProperty("shoe color")];
+		hairColor = Genotype.hairColors[gene.properties.getIProperty("hair color")];
+		if(skeleton!=null) skeleton.setUnit(gene.properties.getFProperty("length"));
+	}
+	
+	public void update2() {
+		this.inactive.update();
+		updateSkeleton();
+		if(seizure!=null && seizure.update()) {
+			
+		} else {
+			this.move(MathUtils.random());
+			this.turn(MathUtils.random()*0.6f-0.3f);
+		}
 	}
 	
 	public void update() {
 		output = brain.update(input);
 		if(seizure!=null && seizure.update()) {
-			for(int i = 0; i < output.length; i++) {
-				output[i] = MathUtils.random(-1f,1f);
+			for(int i = 0; i < output.size; i++) {
+				output.vec[i] = MathUtils.random(-1f,1f);
 			}
 		}
 		this.inactive.update();
@@ -60,38 +122,58 @@ public class Agent {
 			}
 		}
 		if(!inactive() && !isKicking()) {
-			move(output[0]);
-			turn(output[1]);
-			turn(-output[2]);
+			move((output.vec[0]+1)/2f);
+			turn((output.vec[1]+1)/2f);
+			turn(-(output.vec[2]+1)/2f);
 		}
 		if(skeleton!=null) {
 			updateSkeleton();
 		}
 	}
 	
+	public void setTeam(Team team) {
+		this.team = team;
+	}
+	
 	public void setInput(float[] input) {
-		this.input = input;
+		this.input.vec = input;
 	}
 	
 	public Skeleton getSkeleton() {
 		if(skeleton==null) {
-			skeleton=new Skeleton(circle.getX(), circle.getY());
+			skeleton=new Skeleton(circle.getX(), circle.getY(), gene.properties.getFProperty("length"));
 		}
 		return skeleton;
+	}
+	
+	public boolean hasSeizure() {
+		return seizure!=null && seizure.enabled;
 	}
 	
 	public void updateSkeleton() {
 		if(!inactive() && (seizure==null || !seizure.enabled) && !isKicking()) {
 			skeleton.move();
 		}
-		if(seizure!=null && seizure.enabled) {
+		if(hasSeizure()) {
 			skeleton.seizure();
+			circle.particle.pos.set(skeleton.getAverage2DPos());
+			skeleton.setFriction(0.97f);
+		}  else {
+			skeleton.setFriction(skeleton.friction);
 		}
 		skeleton.setPosition(this);
-		if(!isKicking()) {
+		if(!isKicking() && !hasSeizure()) {
 			skeleton.moveFeet();
 		} 
-		skeleton.update();
+		skeleton.update(direction);
+	}
+	
+	public void grabbed(float x, float y, float z) {
+		this.seizure();
+		circle.particle.pos.set(x, y);
+		if(skeleton!=null) {
+			skeleton.get(3).pos.set(x, y, z);
+		}
 	}
 	
 	public void turn(float alpha) {
@@ -114,46 +196,9 @@ public class Agent {
 		this.circle.particle.resetVel();
 	}
 
-	public static float[] crossover(float[] gene1, float[] gene2) {
-		float crossProb = 1f/((float)gene1.length);
-		boolean in1 = true;
-		float[] newGene = new float[gene1.length];
-		for(int i = 0; i < gene1.length; i++) {
-			in1 = MathUtils.randomBoolean(crossProb) ? !in1 : in1;
-			newGene[i] = in1 ? gene1[i] : gene2[i];
-		}
-		return newGene;
-	}
-	
-	public static void mutate(float[] gene) {
-		float mutateProb = 12f/((float)gene.length);
-		float mutationRate = 0.8f;
-		for(int i = 0; i < gene.length; i++) {
-			if(MathUtils.randomBoolean(mutateProb)) {
-				gene[i] = gene[i]+MathUtils.random(-1f, 1f)*mutationRate;
-				gene[i] = MathUtils.clamp(gene[i], minWeight, maxWeight);
-			}
-		}
-	}
-	
-	public static void mutate(float[] gene, float[] adaptation) {
-		float learningRate = (float)(1.0/Math.sqrt(gene.length));
-		for(int i = 0; i < gene.length; i++) {
-			adaptation[i]=(float)(adaptation[i]*Math.exp(learningRate*MathUtils.random.nextGaussian()));
-			gene[i] = gene[i]+(float)(MathUtils.random.nextGaussian())*adaptation[i];
-			gene[i] = MathUtils.clamp(gene[i], minWeight, maxWeight);
-		}
-	}
-
-	public void setGeneIdx(int geneIdx) {
-		this.geneIdx = geneIdx;
-	}
-
 	public void hitBall(Ball ball) {
 		hasHitBall = true;
-		if(team.ballHandler!=null) {
-			team.ballHandler.handleCollision(this, ball);
-		}
+		ballHandler.handleCollision(this, ball);
 		if(skeleton!=null) {
 			skeleton.hitBall(ball);
 		}
@@ -222,7 +267,7 @@ public class Agent {
 
 	public void seizure() {
 		if(seizure==null) {
-			seizure = new Timer(60);
+			seizure = new Timer(80);
 		}
 		seizure.reset();
 		seizure.start();
@@ -248,4 +293,47 @@ public class Agent {
 	public void knockout() {
 		inactive.start();
 	}
+
+
+	public int getGeneIdx() {
+		return team.genotypes.indexOf(gene, true);
+	}
+	
+	public Color getColor() {
+		if(team!=null) 
+			return team.color;
+		else 
+			return color;
+	}
+	
+	public static void friendlyCollision(Agent a1, Agent a2) {
+		Vector2 middle = new Vector2(a2.circle.particle.pos).add(a1.circle.particle.pos);
+		middle.scl(0.5f);
+		a1.skeleton.lhand.pos.set(middle.x, middle.y, a1.skeleton.unit*2);
+		a2.skeleton.lhand.pos.set(middle.x, middle.y, a1.skeleton.unit*2);
+	}
+	
+	public static String generateRandomName() {
+		String name = "";
+		String[] syllables = new String[]{"tim", "hein", "ege", "ube", "lal", "fa", "ba", "la", "bu", "ni", 
+				"noi", "po", "op", "geg", "ri", "ro", "na", "ldo", "ti", "tu", "vri", "ein", "das", "land",
+				"dal", "tuk", "ger", "gert", "paa", "erd", "nie", "van", "dat", "lul", "en", "ari", "elle", 
+				"pe", "nis", "an", "al", "ar", "hans", "sha", "pak", "stan", "bert", "paul", "jan", "kees", 
+				"brad", "chad"};
+		int s1 = MathUtils.random(1, 3);
+		int s2 = MathUtils.random(1, 3);
+		for(int i = 0; i < s1; i++) {
+			name+=syllables[MathUtils.random(syllables.length-1)];
+		}
+		name+=" ";
+		for(int i = 0; i < s2; i++) {
+			name+=syllables[MathUtils.random(syllables.length-1)];
+		}
+		return name;
+	}
+	
+	public static Color getRandomColor() {
+		return Team.colors[MathUtils.random(Team.colors.length-1)];
+	}
+
 }

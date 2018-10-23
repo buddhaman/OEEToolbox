@@ -12,6 +12,7 @@ public class Skeleton {
 	
 	public Array<Particle3> particles = new Array<Particle3>();
 	public Array<Constraint3> constraints = new Array<Constraint3>();
+	
 	public float gravity = 0.02f;
 	
 	public Particle3 lfoot;
@@ -19,14 +20,16 @@ public class Skeleton {
 	public Particle3 rfoot;
 	public Vector3 rfootPos = new Vector3();
 	public Particle3 head;
-	float unit = 1f;
+	public Particle3 lhand;
+	public float unit;
 	float feetLerp = 1f;
-	float friction = 0.9f;
+	public float friction = 0.9f;
 	private Vector3 fixedAt = new Vector3();
-	private Vector3 fixed;
+	private Vector3 fixed;	
+	public float width = 0.25f;
 	
-	public Skeleton(float x, float y) {
-		
+	public Skeleton(float x, float y, float unit) {
+		this.unit = unit;
 		//head
 		addParticle(x, y, 2.5f*unit);
 		addParticle(x, y, 2f*unit);
@@ -62,17 +65,17 @@ public class Skeleton {
 		head = particles.get(0);
 		lfoot = particles.get(9);
 		rfoot = particles.get(11);
+		lhand = particles.get(3);
 		setFriction(friction);
 	}
 	
-	public void update() {
+	public void update(float theta) {
 		for(Particle3 p : particles) {
 			p.update();
 			p.addImpulse(0, 0, -gravity);
 			if(p.pos.z < 0)
 				p.pos.z = 0;
 		}
-		//selfCollision();
 		for(Constraint3 c : constraints) {
 			c.solve();
 		}
@@ -168,6 +171,15 @@ public class Skeleton {
 		Vector3 foot = MathUtils.randomBoolean() ? lfootPos : rfootPos;
 		foot.set(ball.circle.getX(), ball.circle.getY(), 0);
 	}
+	
+	public Vector2 getAverage2DPos() {
+		Vector2 avg = new Vector2(0,0);
+		for(Particle3 p : particles) {
+			avg.add(p.pos.x, p.pos.y);
+		}
+		avg.scl(1f/(particles.size));
+		return avg;
+	}
 
 	public void seizure() {
 		float strength = 0.1f;
@@ -201,5 +213,13 @@ public class Skeleton {
 	private void fixParticle(Vector3 p) {
 		this.fixedAt.set(p);
 		this.fixed = p;
+	}
+
+	public void setUnit(float unit) {
+		float fac = unit/this.unit;
+		this.unit = unit;
+		for(Constraint3 constraint : constraints) {
+			constraint.r*=fac;
+		}
 	}
 }

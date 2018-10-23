@@ -7,12 +7,10 @@ public class FieldEdgeInput extends InputElement {
 	
 	public boolean distance;
 	public boolean angle;
-	public float cutoff;
 	
-	public FieldEdgeInput(boolean distance, boolean angle, float cutoff) {
+	public FieldEdgeInput(boolean distance, boolean angle) {
 		this.distance = distance;
 		this.angle = angle;
-		this.cutoff = cutoff;
 		if(distance) size++;
 		if(angle) size++;
 		input = new float[size];
@@ -21,8 +19,8 @@ public class FieldEdgeInput extends InputElement {
 	@Override
 	public void update(Simulation sim, Agent agent) {
 		Vector2 toEdge = sim.world.bounds.getClosestEdgePoint(agent.circle.particle.pos);
+		float dst = Agent.calcDist(agent, toEdge, agent.cutoff);
 		float ang = Agent.calcAngle(agent, toEdge);
-		float dst = Agent.calcDist(agent, toEdge, cutoff);
 		int idx = 0;
 		if(distance) input[idx++] = dst;
 		if(angle) input[idx++] = ang;

@@ -11,6 +11,7 @@ public class Camera {
 	public int width;
 	public int height;
 	public float scale = 0.1f;
+	public float depth = 0.8f;
 	
 	public Vector2 temp = new Vector2();
 	
@@ -36,5 +37,18 @@ public class Camera {
 	
 	public Vector2 screenToWorld(float x, float y) {
 		return temp.set(this.x-width*scale/2f+x*scale, this.y-height*scale/2f+(height-y)*scale);
+	}
+
+	public void setPosition(float x, float y) {
+		this.x = x;
+		this.y = y;
+	}
+	
+	public void setScale(float scale) {
+		this.scale = scale;
+	}
+
+	public Vector2 worldToScreen(float wx, float wy) {
+		return temp.set((wx-x)/scale + width/2f, (wy-y)/scale + height/2f);
 	}
 }
